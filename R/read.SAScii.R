@@ -1,3 +1,5 @@
+# this code provide a fix for overlapping columns in sas file.
+
 #code from
 #http://r.789695.n4.nabble.com/Capturing-warnings-with-capture-output-td912468.html
 #thanks to Gabor Grothendieck
@@ -34,50 +36,36 @@ function( fn , sas_ri , beginline = 1 , buffersize = 50 , zipped = F , n = -1 , 
 	#initiate both full and partial data frames
 	SASfile.partial <- SASfile <- data.frame()
 	
-	#start the counter
-	i <- 1
-
-	#run this read-in loop until there are no more records to read in
-	while( i == 1 | nrow( SASfile.partial ) > 0 ){
-
-		curStart <- intervals.to.print * ( i - 1 )
-		
-		#if not all the data records should be read in..
-		if ( n != -1 ) {
-			#read in the minimum of..
-			lines.to.read <- 
-				min( 
-					#the number of records to be read in, minus the number of records already read in..
-					n - nrow( SASfile ) , 
-					#and the number of records in the next interval
-					intervals.to.print
-					)
-		} else {
-			lines.to.read <- intervals.to.print
-		}
-		
-		#input actual SAS data text-delimited file to read in
-		
-		# read all columns in as character fields
-		# (some will be converted to numeric later)
-		SASfile.partial <- read.fwf( 
-								fn , 
-								x$width , 
-								col.names=y$varname , 
-								comment.char = '' , 
-								colClasses = 'character' , 
-								buffersize = buffersize , 
-								n = lines.to.read ,
-								skip = ( curStart )
-							)
-
-		SASfile <- rbind( SASfile , SASfile.partial )
-		
-		i <- i + 1
-			
-		cat( "  current progress: read.fwf has read in" , prettyNum( nrow( SASfile ) , big.mark = "," ) , "records                    " , "\r" )
-
-	}
+	#initiate both full and partial data frames
+	
+	SASfile.partial <- SASfile <- data.frame()
+	fixed   <- file(fn)      
+    	attr(fixed, "file.format") <- list(sep = ",", header = FALSE) 
+    	#build sql file here.            
+	#using sqldf for overlapping columns.	
+	sql_substring <- ""
+     	for (i in 1:nrow(x)) {    
+       		sql_substring <- paste(sql_substring , "substr(V1,")
+       		sql_substring <- paste(sql_substring , x[i, "start"])                     
+       		sql_substring <- paste(sql_substring , ",") 
+       		sql_substring <- paste(sql_substring , x[i, "width"]) 
+       		sql_substring <- paste(sql_substring , ")")           
+	       sql_substring <- paste(sql_substring , x[i, "varname"]) 
+	       if (i != nrow(x))
+	       {
+	         sql_substring <- paste(sql_substring, ",")                                               
+	       }        
+	}      
+	sql <- paste("SELECT " , sql_substring) 
+	sql <- paste(sql ," FROM fixed")       
+	total_de_registros = sqldf("select count(*) as total_de_registros from fixed")
+	message <- paste("Total recrods input file: "  ,  total_de_registros)
+	print(message)
+	SASfile.partial <- sqldf(sql)
+	head(SASfile.partial)
+	SASfile <- rbind( SASfile , SASfile.partial )
+	message <- paste("Total columns input file: "  ,  ncol(SASfile))    
+	print(message)
 	
 	# loop through all columns to:
 		# convert to numeric where necessary
